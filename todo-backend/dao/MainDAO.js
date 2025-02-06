@@ -1,137 +1,109 @@
-const db = require('../config/database'); 
+const Task = require('../models/task');
 
 class MainDAO {
+  static async getTasks(userId, status) {
+    try {
+      const whereClause = { user_id: userId, deleteFlag: 0 }; 
 
-static async getTasks(userId, status = 'all') {
-  try {
-    let query = `SELECT * FROM tasks WHERE user_id = ?`;
-    const replacements = [userId];
-
-    if (status !== 'all') {
-      query += ` AND status = ?`;
-      replacements.push(status);
+      if (status !== 0) {
+        whereClause.status = status;
+      }
+  
+      console.log('DAO: Querying tasks with filter:', whereClause);
+  
+      const tasks = await Task.findAll({
+        where: whereClause,
+        order: [['createdAt', 'DESC']],
+      });
+  
+      // tasks.forEach(task => {
+      //   console.log(`Task ID: ${task.id}, Task Status: ${task.status === 0 ? 'In-progress' : task.status === 1 ? 'Completed' : 'Unknown'}`);
+      // });
+  
+      return tasks;
+    } catch (error) {
+      console.error('DAO: Error fetching tasks:', error.message);
+      throw new Error('Database error: ' + error.message);
     }
-    query += ' ORDER BY createdAt DESC';
-    let tasks = await db.query(query, {
-      replacements: replacements,
-      type: db.QueryTypes.SELECT
-    });
-
-    if (!Array.isArray(tasks)) {
-      tasks = [tasks]; 
-    }
-    return tasks;
-  } catch (error) {
-    // console.error('Error in DAO while fetching tasks:', error.message, error.stack);
-    throw new Error('Error fetching tasks from database: ' + error.message);
   }
-}
+  
 
-static async createTask(userId, taskName) {
-  try {
-    if (!userId || !taskName) throw new Error('User ID and Task Name are required');
-    const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const query = `
-      INSERT INTO tasks (user_id, taskName, status, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?)
-    `;
-    const params = [
-      userId,
-      taskName,
-      'In-progress', 
-      timestamp,
-      timestamp,
-    ];
-    console.log("SQL Query:", query);
-    console.log("Query Parameters:", params);
-    const [result] = await db.query(query, {
-      replacements: params,
-      type: db.QueryTypes.INSERT,
-    });
-    console.log('Raw query result:', result);
-    const insertId = typeof result === 'number' ? result : result.insertId || result[0]?.insertId || result.id;
-    if (!insertId) {
-      throw new Error('Failed to retrieve the insertId after task creation');
+
+
+  static async createTask(userId, taskName) {
+    try {
+      if (!userId || !taskName) throw new Error('User ID and Task Name are required');
+
+      const newTask = await Task.create({
+        user_id: userId,
+        taskName,
+        status: 0, 
+      });
+
+      console.log('Task created successfully:', newTask);
+      return newTask;
+    } catch (error) {
+      console.error('Error creating task:', error.message, error.stack);
+      throw new Error('Error creating task in the database: ' + error.message);
     }
-    console.log('Task created successfully. Insert ID:', insertId);
-    return {
-      id: insertId, 
-      userId,
-      taskName,
-      status: 'In-progress',
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-  } catch (error) {
-    console.error('Error creating task in the database:', error.message, error.stack);
-    throw new Error('Error creating task in the database: ' + error.message);
   }
-}
 
   static async updateTask(userId, taskId, taskName, status) {
     try {
       console.log('Updating task for user:', userId, 'Task ID:', taskId, 'Task Name:', taskName, 'Status:', status);
 
-      if (!taskId || isNaN(taskId)) throw new Error('Invalid taskId provided');
+      const updateData = { taskName };
+      if (status !== undefined) updateData.status = parseInt(status);
 
-      let query = `UPDATE tasks SET taskName = ?, updatedAt = NOW()`;
-      const params = [taskName];
+      const [updatedRowCount] = await Task.update(updateData, {
+        where: {
+          id: taskId,
+          user_id: userId,
+        },
+      });
 
-      if (status) {
-        query += `, status = ?`;
-        params.push(status);
-      }
-
-      query += ` WHERE id = ? AND user_id = ?`;
-      params.push(taskId, userId);
-
-      console.log('SQL Query:', query);
-      console.log('Query Parameters:', params);
-
-      const [result] = await db.query(query, { replacements: params });
-
-      if (result.affectedRows === 0) {
+      if (updatedRowCount === 0) {
         console.error('Task not found or update failed for taskId:', taskId);
-        return null; 
+        return null;
       }
 
-      return {
-        id: taskId,
-        userId,
-        taskName,
-        status: status || 'In-progress',
-        updatedAt: new Date().toISOString(),
-      };
+      const updatedTask = await Task.findByPk(taskId);
+      return updatedTask;
     } catch (error) {
-      // console.error('Error updating task in the database:', error.message, error.stack);
+      console.error('Error updating task:', error.message, error.stack);
       throw new Error('Error updating task in the database: ' + error.message);
     }
   }
 
   static async deleteTask(userId, taskId) {
     try {
-      // console.log(`DAO: Attempting to delete task for user ID: ${userId}, Task ID: ${taskId}`);
+      console.log(`Attempting to delete task for user ID: ${userId}, Task ID: ${taskId}`);
 
-      if (!userId || isNaN(userId)) throw new Error('Invalid userId');
-      if (!taskId || isNaN(taskId)) throw new Error('Invalid taskId');
-
-      const query = 'DELETE FROM tasks WHERE user_id = ? AND id = ?';
-      const replacements = [userId, taskId];
-
-      const [result] = await db.query(query, { replacements });
-
-      if (result.affectedRows === 0) {
-        // console.error('Task not found or user lacks permission for taskId:', taskId);
-        return null; 
+      const [updatedRowCount] = await Task.update(
+        { deleteFlag: true }, 
+        {
+          where: {
+            id: taskId,
+            user_id: userId,
+            deleteFlag: false, 
+          },
+        }
+      );
+  
+      if (updatedRowCount === 0) {
+        console.error('Task not found or already deleted for taskId:', taskId);
+        return null;
       }
-
-      // console.log('DAO: Task deleted successfully for taskId:', taskId);
+  
+      console.log('Task deleted successfully for taskId:', taskId);
       return true;
     } catch (error) {
-      // console.error('Error deleting task in the database:', error.message, error.stack);
-      throw new Error('Error deleting task from the database: ' + error.message);
+      console.error('Error soft deleting task:', error.message, error.stack);
+      throw new Error('Error soft deleting task from the database: ' + error.message);
     }
   }
+  
+  
 }
 
 module.exports = MainDAO;

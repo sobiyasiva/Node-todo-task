@@ -14,32 +14,36 @@ module.exports = {
         },
         taskName: {
           type: Sequelize.STRING,
-          allowNull: false, // Ensuring that task name cannot be null
+          allowNull: false, 
         },
         status: {
           type: Sequelize.STRING,
-          allowNull: false, // Ensuring that task status cannot be null
+          allowNull: false, 
+        },
+        deleteFlag: {
+          type: Sequelize.INTEGER,
+          defaultValue: 0,
         },
         createdAt: {
           allowNull: false,
           type: Sequelize.DATE,
-          defaultValue: Sequelize.NOW // Ensure the timestamp is automatically set
+          defaultValue: Sequelize.NOW 
         },
         updatedAt: {
           allowNull: false,
           type: Sequelize.DATE,
-          defaultValue: Sequelize.NOW // Ensure the timestamp is automatically set
+          defaultValue: Sequelize.NOW 
         },
-        // Adding the user_id column
+        
         user_id: {
           type: Sequelize.INTEGER,
-          allowNull: false,  // Assuming that every task must have an associated user
+          allowNull: false,  
           references: {
-            model: 'users', // Assuming your users table is called 'users'
-            key: 'id',      // The primary key of the users table
+            model: 'Users', 
+            key: 'id',      
           },
-          onUpdate: 'CASCADE',  // Update tasks if user ID is updated
-          onDelete: 'CASCADE',  // Delete tasks if user is deleted
+          onUpdate: 'CASCADE', 
+          onDelete: 'CASCADE',  
         }
       });
 
@@ -61,3 +65,6 @@ module.exports = {
     }
   }
 };
+
+
+//use strict allows to write code and shows correct error for debugging .i.e it handles error efficiently
